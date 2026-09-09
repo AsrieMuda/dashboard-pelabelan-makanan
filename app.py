@@ -187,7 +187,7 @@ if menu_pilihan == "🚀 Data Live (2026)":
         g_col1, g_col2 = st.columns([1, 1])
         
         with g_col1:
-            st.subheader("📦 Top Kumpulan Makanan (Lajur AC)")
+            st.subheader("Top Kumpulan Makanan")
             if not df_filtered.empty:
                 counts_ac = df_filtered['KUMPULAN_CLEAN'].value_counts().head(10).reset_index()
                 counts_ac.columns = ['Kumpulan Makanan', 'Jumlah']
@@ -196,7 +196,7 @@ if menu_pilihan == "🚀 Data Live (2026)":
                 st.plotly_chart(fig_bar_ac, use_container_width=True)
 
         with g_col2:
-            st.subheader("🏷️ Top Produk & Jenama (Lajur N)")
+            st.subheader("Top Produk & Jenama")
             if not df_filtered.empty:
                 counts_n = df_filtered['PRODUK_CLEAN'].value_counts().head(10).reset_index()
                 counts_n.columns = ['Nama Produk & Jenama', 'Jumlah']
