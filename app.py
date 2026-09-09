@@ -11,7 +11,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# Muat turun FontAwesome
+# Muat turun FontAwesome untuk ikon
 st.markdown('<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">', unsafe_allow_html=True)
 
 # Styling Kad KPI Berwarna
@@ -56,7 +56,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ----------------------------------------------------
-# 2. FUNGSI MUAT DATA (2 SUMBER ASING)
+# 2. FUNGSI MUAT DATA
 # ----------------------------------------------------
 
 # (A) Data Live 2026 dari Sheet Asal
@@ -82,17 +82,18 @@ def load_data_2026():
     except Exception as e:
         return pd.DataFrame(), str(e)
 
-# (B) Data Arkib MasterData (2023 - 2025)
+# (B) Data Arkib MasterData (Mengeksport menggunakan Publish Link CSV Baharu)
 @st.cache_data(ttl=300)
 def load_data_master():
-    sheet_id = "13vBLK7XnzhJFKkouzHWg4sBPXwl10WUJKSO638uwjRU"
-    url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv&sheet=MasterData"
+    # URL Terus dari pautan Publish to Web CSV yang anda kongsikan
+    url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vT-az79V0Akfc3S2MR0NdzSiQZlThMAr8JO-CIdkmB3d2yiIA_p-q4bEHCYREVc1VF4gR9qhtPn4Bdy/pub?gid=184868812&single=true&output=csv"
+    
     try:
         df = pd.read_csv(url)
         df.columns = df.columns.astype(str).str.strip()
         
-        # Kesan lajur tahun atau tarikh
-        tarikh_cols = [c for c in df.columns if 'TARIKH' in c.upper() or 'TAHUN' in c.upper()]
+        # Ekstrak Tahun dari lajur Tarikh atau tetapkan default
+        tarikh_cols = [c for c in df.columns if 'TARIKH' in c.upper() or 'TAHUN' in c.upper() or 'BULAN' in c.upper()]
         if tarikh_cols:
             df['TARIKH_DATETIME'] = pd.to_datetime(df[tarikh_cols[0]], errors='coerce')
             df['Tahun'] = df['TARIKH_DATETIME'].dt.year.fillna(2024).astype(int)
@@ -107,7 +108,7 @@ def load_data_master():
         return pd.DataFrame(), str(e)
 
 # ----------------------------------------------------
-# 3. SIDEBAR NAVIGATION (PILIH PAGE)
+# 3. SIDEBAR NAVIGATION
 # ----------------------------------------------------
 st.sidebar.title("📌 Menu Halaman")
 menu_pilihan = st.sidebar.radio(
