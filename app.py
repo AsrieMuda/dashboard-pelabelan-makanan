@@ -11,10 +11,10 @@ st.set_page_config(
     layout="wide"
 )
 
-# Muat turun FontAwesome
+# Muat turun FontAwesome untuk ikon kad
 st.markdown('<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">', unsafe_allow_html=True)
 
-# Styling Kad KPI
+# Styling Kad KPI Berwarna
 st.markdown("""
     <style>
     .kpi-card {
@@ -56,25 +56,27 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ----------------------------------------------------
-# 2. FUNGSI MUAT DATA (FIXED & SAFE)
+# 2. FUNGSI MUAT DATA DIRECT DARI FAIL ASAL
 # ----------------------------------------------------
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=60) # Segarkan data automatik setiap 1 minit
 def load_data():
-    sheet_id = "13vBLK7XnzhJFKkouzHWg4sBPXwl10WUJKSO638uwjRU"
-    sheet_name = "2026_Live"
+    # ID Sheet Asal dari formula IMPORTRANGE anda
+    original_sheet_id = "1GCgoOI96Nhaq57ia1CAPG8cWrboBo-kvUlnYSNNVRw8"
+    original_tab_name = "2026"
     
-    # URL GViz CSV Export
-    url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv&sheet={sheet_name}"
+    # URL GViz Export terus dari sumber asal
+    url = f"https://docs.google.com/spreadsheets/d/{original_sheet_id}/gviz/tq?tqx=out:csv&sheet={original_tab_name}"
     
     try:
         df_raw = pd.read_csv(url)
         
         if df_raw.empty:
-            return pd.DataFrame(), "Fail Google Sheets kosong."
+            return pd.DataFrame(), "Fail Google Sheets asal adalah kosong."
             
+        # Bersihkan nama lajur
         df_raw.columns = df_raw.columns.astype(str).str.strip()
         
-        # Pengesahan & Pembersihan Tarikh / Tahun
+        # Ekstrak Tarikh & Tahun
         tarikh_cols = [c for c in df_raw.columns if 'TARIKH' in c.upper()]
         if tarikh_cols:
             df_raw['TARIKH_DATETIME'] = pd.to_datetime(df_raw[tarikh_cols[0]], errors='coerce')
@@ -82,7 +84,7 @@ def load_data():
         else:
             df_raw['Tahun'] = 2026
 
-        # Pembersihan Lajur Fi
+        # Ekstrak & Bersihkan Lajur Fi Bayaran (RM)
         fi_cols = [c for c in df_raw.columns if 'FI' in c.upper()]
         if fi_cols:
             df_raw['FI_CLEAN'] = pd.to_numeric(df_raw[fi_cols[0]], errors='coerce').fillna(0)
@@ -94,27 +96,27 @@ def load_data():
     except Exception as err:
         return pd.DataFrame(), str(err)
 
-# Panggilan selamat ke atas load_data()
+# Panggilan muat data
 df, error_msg = load_data()
 
 # ----------------------------------------------------
 # 3. SEMAKAN DATA & PAPARAN DASHBOARD
 # ----------------------------------------------------
 if error_msg:
-    st.error(f"❌ Gagal membaca Google Sheets: {error_msg}")
-    st.info("💡 **Petua Penyelesaian:** Sila pastikan tab di Google Sheets dinamakan **2026_Live** (tanpa sebarang ruang kosong berlebihan) dan kebenaran perkongsian ditetapkan kepada 'Anyone with the link can view'.")
+    st.error(f"❌ Ralat membaca fail asal: {error_msg}")
+    st.info("💡 **Langkah Penting:** Sila pastikan FAIL ASAL (`1GCgoOI96Nhaq57ia1CAPG8cWrboBo-kvUlnYSNNVRw8`) juga mempunyai tetapan perkongsian **'Anyone with the link can view'**.")
 
 elif df.empty:
-    st.warning("⚠️ Data ditemui tetapi helaian (sheet) adalah kosong.")
+    st.warning("⚠️ Data ditemui tetapi helaian asal adalah kosong.")
 
 else:
-    # Kenal pasti nama lajur dinamik
+    # Kenal pasti nama lajur
     col_bulan = 'BULAN' if 'BULAN' in df.columns else df.columns[0]
     col_jenis = [c for c in df.columns if 'JENIS' in c.upper()]
     jenis_field = col_jenis[0] if col_jenis else None
 
     # ----------------------------------------------------
-    # SIDEBAR (PENAPIS DATA)
+    # SIDEBAR (PENAPIS DATA INTERAKTIF)
     # ----------------------------------------------------
     st.sidebar.header("🔍 Penapis Data")
 
@@ -156,11 +158,11 @@ else:
     # HEADER DASHBOARD
     # ----------------------------------------------------
     st.title("📊 Dashboard Pelabelan Semula Makanan Import")
-    st.caption("Data Permohonan Integrasi Kebangsaan (2026 Live)")
+    st.caption("Data Permohonan Live Terus Dari Sumber Asal (2026)")
     st.divider()
 
     # ----------------------------------------------------
-    # KAD KPI BERWARNA
+    # KAD KPI BERWARNA (CARD VIEW)
     # ----------------------------------------------------
     total_apps = len(df_filtered)
     total_fees = df_filtered['FI_CLEAN'].sum()
