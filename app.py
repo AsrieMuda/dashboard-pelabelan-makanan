@@ -275,7 +275,7 @@ else:
         g_col1, g_col2 = st.columns([1, 1])
         
         with g_col1:
-            st.subheader("📦 Kumpulan Makanan (Lajur AC)")
+            st.subheader("Kumpulan Makanan")
             if not df_filtered_m.empty:
                 counts_ac_m = df_filtered_m['KUMPULAN_CLEAN'].value_counts().head(10).reset_index()
                 counts_ac_m.columns = ['Kumpulan Makanan', 'Jumlah']
@@ -284,7 +284,7 @@ else:
                 st.plotly_chart(fig_bar_ac_m, use_container_width=True)
 
         with g_col2:
-            st.subheader("🏷️ Top Produk & Jenama (Lajur N)")
+            st.subheader("Top Produk & Jenama")
             if not df_filtered_m.empty:
                 counts_n_m = df_filtered_m['PRODUK_CLEAN'].value_counts().head(10).reset_index()
                 counts_n_m.columns = ['Nama Produk & Jenama', 'Jumlah']
