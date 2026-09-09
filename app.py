@@ -11,10 +11,10 @@ st.set_page_config(
     layout="wide"
 )
 
-# Muat turun FontAwesome untuk ikon pada kad KPI
+# Muat turun FontAwesome
 st.markdown('<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">', unsafe_allow_html=True)
 
-# CSS Khas Rekaan Kad KPI Berwarna dan Berbayang
+# Styling Kad KPI
 st.markdown("""
     <style>
     .kpi-card {
@@ -56,73 +56,84 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ----------------------------------------------------
-# FUNGSI MUAT DATA DARI GOOGLE SHEETS (REVISION FIX 404)
+# 2. FUNGSI MUAT DATA (FIXED & SAFE)
 # ----------------------------------------------------
-@st.cache_data(ttl=60)  # Segarkan data automatik setiap 1 minit
+@st.cache_data(ttl=60)
 def load_data():
     sheet_id = "13vBLK7XnzhJFKkouzHWg4sBPXwl10WUJKSO638uwjRU"
+    sheet_name = "2026_Live"
     
-    # URL eksport CSV langsung menggunakan nama tab '2026_Live'
-    url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv&sheet=2026_Live"
+    # URL GViz CSV Export
+    url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv&sheet={sheet_name}"
     
     try:
-        df = pd.read_csv(url)
+        df_raw = pd.read_csv(url)
         
-        # Bersihkan nama lajur daripada ruang kosong
-        df.columns = df.columns.str.strip()
+        if df_raw.empty:
+            return pd.DataFrame(), "Fail Google Sheets kosong."
+            
+        df_raw.columns = df_raw.columns.astype(str).str.strip()
         
-        # Pembersihan Lajur Tarikh & Tahun
-        tarikh_col = [c for c in df.columns if 'TARIKH TERIMA' in c]
-        if tarikh_col:
-            df['TARIKH_DATETIME'] = pd.to_datetime(df[tarikh_col[0]], errors='coerce')
-            df['Tahun'] = df['TARIKH_DATETIME'].dt.year.fillna(2026).astype(int)
+        # Pengesahan & Pembersihan Tarikh / Tahun
+        tarikh_cols = [c for c in df_raw.columns if 'TARIKH' in c.upper()]
+        if tarikh_cols:
+            df_raw['TARIKH_DATETIME'] = pd.to_datetime(df_raw[tarikh_cols[0]], errors='coerce')
+            df_raw['Tahun'] = df_raw['TARIKH_DATETIME'].dt.year.fillna(2026).astype(int)
         else:
-            df['Tahun'] = 2026
+            df_raw['Tahun'] = 2026
 
-        # Pembersihan Lajur Fi Bayaran (RM)
-        fi_col = [c for c in df.columns if 'FI' in c]
-        if fi_col:
-            df['FI_CLEAN'] = pd.to_numeric(df[fi_col[0]], errors='coerce').fillna(0)
+        # Pembersihan Lajur Fi
+        fi_cols = [c for c in df_raw.columns if 'FI' in c.upper()]
+        if fi_cols:
+            df_raw['FI_CLEAN'] = pd.to_numeric(df_raw[fi_cols[0]], errors='coerce').fillna(0)
         else:
-            df['FI_CLEAN'] = 0.0
+            df_raw['FI_CLEAN'] = 0.0
 
-        return df
-    except Exception as e:
-        st.error(f"Gagal memuatkan data dari Google Sheets: {e}")
-        return pd.DataFrame()
+        return df_raw, None
+        
+    except Exception as err:
+        return pd.DataFrame(), str(err)
+
+# Panggilan selamat ke atas load_data()
+df, error_msg = load_data()
 
 # ----------------------------------------------------
-# 3. SEMAKAN DATA & PEMBINAAN DASHBOARD
+# 3. SEMAKAN DATA & PAPARAN DASHBOARD
 # ----------------------------------------------------
-if not df.empty:
-    
-    # Kenali nama-nama lajur utama
+if error_msg:
+    st.error(f"❌ Gagal membaca Google Sheets: {error_msg}")
+    st.info("💡 **Petua Penyelesaian:** Sila pastikan tab di Google Sheets dinamakan **2026_Live** (tanpa sebarang ruang kosong berlebihan) dan kebenaran perkongsian ditetapkan kepada 'Anyone with the link can view'.")
+
+elif df.empty:
+    st.warning("⚠️ Data ditemui tetapi helaian (sheet) adalah kosong.")
+
+else:
+    # Kenal pasti nama lajur dinamik
     col_bulan = 'BULAN' if 'BULAN' in df.columns else df.columns[0]
-    col_kod = [c for c in df.columns if 'KOD' in c][0] if any('KOD' in c for c in df.columns) else df.columns[1]
-    col_jenis = [c for c in df.columns if 'JENIS PERMOHONAN' in c][0] if any('JENIS PERMOHONAN' in c for c in df.columns) else None
-    col_syarikat = [c for c in df.columns if 'SYARIKAT' in c][0] if any('SYARIKAT' in c for c in df.columns) else None
+    col_jenis = [c for c in df.columns if 'JENIS' in c.upper()]
+    jenis_field = col_jenis[0] if col_jenis else None
 
     # ----------------------------------------------------
-    # SIDEBAR (PENAPIS DATA INTERAKTIF)
+    # SIDEBAR (PENAPIS DATA)
     # ----------------------------------------------------
     st.sidebar.header("🔍 Penapis Data")
 
-    # Penapis 1: Tahun
+    # Penapis Tahun
     senarai_tahun = sorted(list(df['Tahun'].unique()))
     tahun_dipilih = st.sidebar.multiselect("Pilih Tahun:", options=senarai_tahun, default=senarai_tahun)
 
-    # Penapis 2: Bulan
-    senarai_bulan = list(df[col_bulan].dropna().unique())
+    # Penapis Bulan
+    senarai_bulan = [b for b in df[col_bulan].dropna().unique() if str(b).strip() != '']
     bulan_dipilih = st.sidebar.multiselect("Pilih Bulan:", options=senarai_bulan, default=senarai_bulan)
 
-    # Penapis 3: Jenis Permohonan
-    if col_jenis:
-        senarai_jenis = list(df[col_jenis].dropna().unique())
+    # Penapis Jenis Permohonan
+    if jenis_field:
+        senarai_jenis = [j for j in df[jenis_field].dropna().unique() if str(j).strip() != '']
         jenis_dipilih = st.sidebar.multiselect("Pilih Jenis Permohonan:", options=senarai_jenis, default=senarai_jenis)
     else:
         jenis_dipilih = []
 
-    # Penapis 4: Range Slider Fi (RM)
+    # Slider Julat Fi
     min_fi = float(df['FI_CLEAN'].min())
     max_fi = float(df['FI_CLEAN'].max())
     if min_fi == max_fi:
@@ -130,32 +141,31 @@ if not df.empty:
 
     julat_fi = st.sidebar.slider("Pilih Julat Fi (RM):", min_value=min_fi, max_value=max_fi, value=(min_fi, max_fi))
 
-    # TAPIS DATA
+    # LOGIK TAPISAN DATA
     df_filtered = df.copy()
     if tahun_dipilih:
         df_filtered = df_filtered[df_filtered['Tahun'].isin(tahun_dipilih)]
     if bulan_dipilih:
         df_filtered = df_filtered[df_filtered[col_bulan].isin(bulan_dipilih)]
-    if jenis_dipilih and col_jenis:
-        df_filtered = df_filtered[df_filtered[col_jenis].isin(jenis_dipilih)]
+    if jenis_dipilih and jenis_field:
+        df_filtered = df_filtered[df_filtered[jenis_field].isin(jenis_dipilih)]
+    
     df_filtered = df_filtered[(df_filtered['FI_CLEAN'] >= julat_fi[0]) & (df_filtered['FI_CLEAN'] <= julat_fi[1])]
 
     # ----------------------------------------------------
-    # PAPARAN UTAMA
+    # HEADER DASHBOARD
     # ----------------------------------------------------
     st.title("📊 Dashboard Pelabelan Semula Makanan Import")
     st.caption("Data Permohonan Integrasi Kebangsaan (2026 Live)")
     st.divider()
 
     # ----------------------------------------------------
-    # KAD KPI BERWARNA (CARD VIEW)
+    # KAD KPI BERWARNA
     # ----------------------------------------------------
     total_apps = len(df_filtered)
     total_fees = df_filtered['FI_CLEAN'].sum()
-    
-    # Anggaran status kelulusan/proses
-    lulus_count = total_apps # Boleh disesuaikan mengikut logik lajur status
-    kadar_lulus = 100.0 if total_apps > 0 else 0.0
+    total_proses = total_apps
+    kadar_proses = 100.0 if total_apps > 0 else 0.0
 
     col1, col2, col3, col4 = st.columns(4)
 
@@ -186,7 +196,7 @@ if not df.empty:
             <div class="kpi-card kpi-cyan">
                 <div>
                     <div class="kpi-title">PERMOHONAN PROSES</div>
-                    <div class="kpi-value">{lulus_count:,}</div>
+                    <div class="kpi-value">{total_proses:,}</div>
                 </div>
                 <div class="kpi-icon"><i class="fa-solid fa-circle-check"></i></div>
             </div>
@@ -197,7 +207,7 @@ if not df.empty:
             <div class="kpi-card kpi-yellow">
                 <div>
                     <div class="kpi-title">KADAR PROSES</div>
-                    <div class="kpi-value">{kadar_lulus:.1f}%</div>
+                    <div class="kpi-value">{kadar_proses:.1f}%</div>
                 </div>
                 <div class="kpi-icon"><i class="fa-solid fa-percent"></i></div>
             </div>
@@ -212,8 +222,8 @@ if not df.empty:
 
     with g_col1:
         st.subheader("📦 Jenis Permohonan")
-        if col_jenis and not df_filtered.empty:
-            jenis_counts = df_filtered[col_jenis].value_counts().reset_index()
+        if jenis_field and not df_filtered.empty:
+            jenis_counts = df_filtered[jenis_field].value_counts().reset_index()
             jenis_counts.columns = ['Jenis', 'Jumlah']
             
             fig_bar = px.bar(
@@ -224,12 +234,7 @@ if not df.empty:
                 text='Jumlah',
                 color_discrete_sequence=['#0d6efd']
             )
-            fig_bar.update_layout(
-                yaxis={'categoryorder':'total ascending'},
-                margin=dict(l=20, r=20, t=20, b=20),
-                paper_bgcolor='rgba(0,0,0,0)',
-                plot_bgcolor='rgba(0,0,0,0)'
-            )
+            fig_bar.update_layout(yaxis={'categoryorder':'total ascending'}, margin=dict(l=20, r=20, t=20, b=20))
             st.plotly_chart(fig_bar, use_container_width=True)
         else:
             st.info("Tiada data untuk dipaparkan.")
@@ -253,19 +258,16 @@ if not df.empty:
             st.info("Tiada data untuk dipaparkan.")
 
     # ----------------------------------------------------
-    # ENJIN CARIAN & JADUAL DATA
+    # JADUAL DATA LIVE & CARIAN
     # ----------------------------------------------------
     st.subheader("🔍 Enjin Carian & Data Permohonan Live")
 
     search_term = st.text_input("Carian Pantas (Syarikat, Kod Rujukan, dll.):")
-    if search_term and not df_filtered.empty:
-        # Cari di seluruh lajur string
-        mask = df_filtered.astype(str).apply(lambda row: row.str.contains(search_term, case=False, na=False)).any(axis=1)
-        df_filtered = df_filtered[mask]
-
-    # Gugurkan lajur bantuan dalam paparan jadual
+    
     display_df = df_filtered.drop(columns=['TARIKH_DATETIME', 'FI_CLEAN', 'Tahun'], errors='ignore')
-    st.dataframe(display_df, use_container_width=True, hide_index=True)
+    
+    if search_term and not display_df.empty:
+        mask = display_df.astype(str).apply(lambda row: row.str.contains(search_term, case=False, na=False)).any(axis=1)
+        display_df = display_df[mask]
 
-else:
-    st.warning("Gagal memuatkan data. Sila pastikan 'gid' tab '2026_Live' dimasukkan dengan betul dalam kod.")
+    st.dataframe(display_df, use_container_width=True, hide_index=True)
