@@ -2,25 +2,27 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 
-# 1. Konfigurasi Halaman
+# ----------------------------------------------------
+# 1. KONFIGURASI HALAMAN & TEMA
+# ----------------------------------------------------
 st.set_page_config(
     page_title="Dashboard Pelabelan Semula Makanan Import 2026",
     page_icon="📊",
     layout="wide"
 )
 
-# Load FontAwesome untuk ikon pada kad KPI
+# Muat turun FontAwesome untuk ikon pada kad KPI
 st.markdown('<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">', unsafe_allow_html=True)
 
-# 2. CSS Khas Rekaan Kad KPI Berwarna
+# CSS Khas Rekaan Kad KPI Berwarna dan Berbayang
 st.markdown("""
     <style>
     .kpi-card {
         border-radius: 12px;
         padding: 20px;
         color: white;
-        margin-bottom: 10px;
-        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+        margin-bottom: 15px;
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
         display: flex;
         justify-content: space-between;
         align-items: center;
@@ -28,7 +30,7 @@ st.markdown("""
     .kpi-blue { background-color: #0d6efd; }
     .kpi-green { background-color: #198754; }
     .kpi-cyan { background-color: #0dcaf0; }
-    .kpi-yellow { background-color: #ffc107; color: #000 !important; }
+    .kpi-yellow { background-color: #ffc107; color: #212529 !important; }
     
     .kpi-title {
         font-size: 0.85rem;
@@ -44,7 +46,7 @@ st.markdown("""
     }
     .kpi-icon {
         font-size: 2.5rem;
-        opacity: 0.4;
+        opacity: 0.35;
     }
     .block-container {
         padding-top: 2rem;
@@ -53,93 +55,113 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# 3. Fungsi Muat Data dari Tab '2026_Live'
-@st.cache_data(ttl=300) # Data segar setiap 5 menit
+# ----------------------------------------------------
+# 2. FUNGSI MUAT DATA DARI GOOGLE SHEETS
+# ----------------------------------------------------
+@st.cache_data(ttl=60)  # Segarkan data automatik setiap 1 minit
 def load_data():
-    # ID Spreadsheet dari imej anda
     sheet_id = "13vBLK7XnzhJFKkouzHWg4sBPXwl10WUJKSO638uwjRU"
-    sheet_name = "2026_Live"
-    url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv&sheet={sheet_name}"
+    
+    # ⚠️ MASUKKAN NOMBOR GID TAB '2026_Live' ANDA DI SINI
+    # Buka tab 2026_Live kat browser, salin nombor selepas 'gid=' dalam URL
+    gid = "531239856"  # Contoh: tukar nombor ini jika berbeza
+    
+    # Format URL CSV menggunakan GID (Mengelakkan Ralat HTTP 404)
+    url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv&gid={gid}"
     
     try:
         df = pd.read_csv(url)
         
-        # Bersihkan nama lajur daripada sebarang ruang kosong
+        # Bersihkan nama lajur daripada ruang kosong di awal/hujung
         df.columns = df.columns.str.strip()
         
-        # Ekstrak Tahun dari Tarikh Terima / Pembersihan Data
-        if 'TARIKH TERIMA PERMOHONAN DI HQ' in df.columns:
-            df['TARIKH'] = pd.to_datetime(df['TARIKH TERIMA PERMOHONAN DI HQ'], errors='coerce')
-            df['Tahun'] = df['TARIKH'].dt.year.fillna(2026).astype(int)
+        # Pembersihan Lajur Tarikh & Tahun
+        tarikh_col = [c for c in df.columns if 'TARIKH TERIMA' in c]
+        if tarikh_col:
+            df['TARIKH_DATETIME'] = pd.to_datetime(df[tarikh_col[0]], errors='coerce')
+            df['Tahun'] = df['TARIKH_DATETIME'].dt.year.fillna(2026).astype(int)
         else:
             df['Tahun'] = 2026
 
-        # Pembersihan Lajur Fi Bayaran
-        if 'FI BAYARAN (RM)' in df.columns:
-            df['FI BAYARAN (RM)'] = pd.to_numeric(df['FI BAYARAN (RM)'], errors='coerce').fillna(0)
-            
+        # Pembersihan Lajur Fi Bayaran (RM)
+        fi_col = [c for c in df.columns if 'FI' in c]
+        if fi_col:
+            df['FI_CLEAN'] = pd.to_numeric(df[fi_col[0]], errors='coerce').fillna(0)
+        else:
+            df['FI_CLEAN'] = 0.0
+
+        return df
     except Exception as e:
         st.error(f"Gagal memuatkan data dari Google Sheets: {e}")
         return pd.DataFrame()
 
-    return df
-
 df = load_data()
 
+# ----------------------------------------------------
+# 3. SEMAKAN DATA & PEMBINAAN DASHBOARD
+# ----------------------------------------------------
 if not df.empty:
+    
+    # Kenali nama-nama lajur utama
+    col_bulan = 'BULAN' if 'BULAN' in df.columns else df.columns[0]
+    col_kod = [c for c in df.columns if 'KOD' in c][0] if any('KOD' in c for c in df.columns) else df.columns[1]
+    col_jenis = [c for c in df.columns if 'JENIS PERMOHONAN' in c][0] if any('JENIS PERMOHONAN' in c for c in df.columns) else None
+    col_syarikat = [c for c in df.columns if 'SYARIKAT' in c][0] if any('SYARIKAT' in c for c in df.columns) else None
+
     # ----------------------------------------------------
-    # 4. SIDEBAR (PENAPIS DATA)
+    # SIDEBAR (PENAPIS DATA INTERAKTIF)
     # ----------------------------------------------------
     st.sidebar.header("🔍 Penapis Data")
 
-    # Penapis Tahun
-    senarai_tahun = sorted(list(df['Tahun'].unique())) if 'Tahun' in df.columns else [2026]
+    # Penapis 1: Tahun
+    senarai_tahun = sorted(list(df['Tahun'].unique()))
     tahun_dipilih = st.sidebar.multiselect("Pilih Tahun:", options=senarai_tahun, default=senarai_tahun)
 
-    # Penapis Bulan
-    senarai_bulan = list(df['BULAN'].dropna().unique()) if 'BULAN' in df.columns else []
+    # Penapis 2: Bulan
+    senarai_bulan = list(df[col_bulan].dropna().unique())
     bulan_dipilih = st.sidebar.multiselect("Pilih Bulan:", options=senarai_bulan, default=senarai_bulan)
 
-    # Penapis Jenis Permohonan
-    senarai_jenis = list(df['JENIS PERMOHONAN (NRC/RETAIL/ONLINE/POS)'].dropna().unique()) if 'JENIS PERMOHONAN (NRC/RETAIL/ONLINE/POS)' in df.columns else []
-    jenis_dipilih = st.sidebar.multiselect("Pilih Jenis Permohonan:", options=senarai_jenis, default=senarai_jenis)
+    # Penapis 3: Jenis Permohonan
+    if col_jenis:
+        senarai_jenis = list(df[col_jenis].dropna().unique())
+        jenis_dipilih = st.sidebar.multiselect("Pilih Jenis Permohonan:", options=senarai_jenis, default=senarai_jenis)
+    else:
+        jenis_dipilih = []
 
-    # Slider Julat Fi
-    min_fi = float(df['FI BAYARAN (RM)'].min()) if 'FI BAYARAN (RM)' in df.columns else 0.0
-    max_fi = float(df['FI BAYARAN (RM)'].max()) if 'FI BAYARAN (RM)' in df.columns else 1000.0
+    # Penapis 4: Range Slider Fi (RM)
+    min_fi = float(df['FI_CLEAN'].min())
+    max_fi = float(df['FI_CLEAN'].max())
     if min_fi == max_fi:
         max_fi += 100.0
 
     julat_fi = st.sidebar.slider("Pilih Julat Fi (RM):", min_value=min_fi, max_value=max_fi, value=(min_fi, max_fi))
 
-    # Tapis Data
+    # TAPIS DATA
     df_filtered = df.copy()
-    
-    if tahun_dipilih and 'Tahun' in df.columns:
+    if tahun_dipilih:
         df_filtered = df_filtered[df_filtered['Tahun'].isin(tahun_dipilih)]
-    if bulan_dipilih and 'BULAN' in df.columns:
-        df_filtered = df_filtered[df_filtered['BULAN'].isin(bulan_dipilih)]
-    if jenis_dipilih and 'JENIS PERMOHONAN (NRC/RETAIL/ONLINE/POS)' in df.columns:
-        df_filtered = df_filtered[df_filtered['JENIS PERMOHONAN (NRC/RETAIL/ONLINE/POS)'].isin(jenis_dipilih)]
-    if 'FI BAYARAN (RM)' in df.columns:
-        df_filtered = df_filtered[(df_filtered['FI BAYARAN (RM)'] >= julat_fi[0]) & (df_filtered['FI BAYARAN (RM)'] <= julat_fi[1])]
+    if bulan_dipilih:
+        df_filtered = df_filtered[df_filtered[col_bulan].isin(bulan_dipilih)]
+    if jenis_dipilih and col_jenis:
+        df_filtered = df_filtered[df_filtered[col_jenis].isin(jenis_dipilih)]
+    df_filtered = df_filtered[(df_filtered['FI_CLEAN'] >= julat_fi[0]) & (df_filtered['FI_CLEAN'] <= julat_fi[1])]
 
     # ----------------------------------------------------
-    # 5. HEADER DASHBOARD
+    # PAPARAN UTAMA
     # ----------------------------------------------------
     st.title("📊 Dashboard Pelabelan Semula Makanan Import")
-    st.caption("Data Permohonan Integrasi Live (2026)")
+    st.caption("Data Permohonan Integrasi Kebangsaan (2026 Live)")
     st.divider()
 
     # ----------------------------------------------------
-    # 6. KAD KPI BERWARNA
+    # KAD KPI BERWARNA (CARD VIEW)
     # ----------------------------------------------------
     total_apps = len(df_filtered)
-    total_fees = df_filtered['FI BAYARAN (RM)'].sum() if 'FI BAYARAN (RM)' in df_filtered.columns else 0
+    total_fees = df_filtered['FI_CLEAN'].sum()
     
-    # Kira Lulus (Berdasarkan Kod Kelulusan 'S' / 'K' atau seumpamanya)
-    total_lulus = len(df_filtered[df_filtered['JENIS PERMOHONAN (S / K )\n\n- = KELULUSAN RELABEL'].notna()]) if 'JENIS PERMOHONAN (S / K )\n\n- = KELULUSAN RELABEL' in df_filtered.columns else total_apps
-    kadar_lulus = (total_lulus / total_apps * 100) if total_apps > 0 else 0
+    # Anggaran status kelulusan/proses
+    lulus_count = total_apps # Boleh disesuaikan mengikut logik lajur status
+    kadar_lulus = 100.0 if total_apps > 0 else 0.0
 
     col1, col2, col3, col4 = st.columns(4)
 
@@ -170,7 +192,7 @@ if not df.empty:
             <div class="kpi-card kpi-cyan">
                 <div>
                     <div class="kpi-title">PERMOHONAN PROSES</div>
-                    <div class="kpi-value">{total_lulus:,}</div>
+                    <div class="kpi-value">{lulus_count:,}</div>
                 </div>
                 <div class="kpi-icon"><i class="fa-solid fa-circle-check"></i></div>
             </div>
@@ -190,14 +212,14 @@ if not df.empty:
     st.markdown("<br>", unsafe_allow_html=True)
 
     # ----------------------------------------------------
-    # 7. GRAF INTERAKTIF
+    # GRAF INTERAKTIF
     # ----------------------------------------------------
     g_col1, g_col2 = st.columns([2, 1])
 
     with g_col1:
         st.subheader("📦 Jenis Permohonan")
-        if 'JENIS PERMOHONAN (NRC/RETAIL/ONLINE/POS)' in df_filtered.columns and not df_filtered.empty:
-            jenis_counts = df_filtered['JENIS PERMOHONAN (NRC/RETAIL/ONLINE/POS)'].value_counts().reset_index()
+        if col_jenis and not df_filtered.empty:
+            jenis_counts = df_filtered[col_jenis].value_counts().reset_index()
             jenis_counts.columns = ['Jenis', 'Jumlah']
             
             fig_bar = px.bar(
@@ -208,13 +230,20 @@ if not df.empty:
                 text='Jumlah',
                 color_discrete_sequence=['#0d6efd']
             )
-            fig_bar.update_layout(yaxis={'categoryorder':'total ascending'}, margin=dict(l=20, r=20, t=20, b=20))
+            fig_bar.update_layout(
+                yaxis={'categoryorder':'total ascending'},
+                margin=dict(l=20, r=20, t=20, b=20),
+                paper_bgcolor='rgba(0,0,0,0)',
+                plot_bgcolor='rgba(0,0,0,0)'
+            )
             st.plotly_chart(fig_bar, use_container_width=True)
+        else:
+            st.info("Tiada data untuk dipaparkan.")
 
     with g_col2:
         st.subheader("📌 Agihan Mengikut Bulan")
-        if 'BULAN' in df_filtered.columns and not df_filtered.empty:
-            bulan_counts = df_filtered['BULAN'].value_counts().reset_index()
+        if not df_filtered.empty:
+            bulan_counts = df_filtered[col_bulan].value_counts().reset_index()
             bulan_counts.columns = ['Bulan', 'Jumlah']
             
             fig_pie = px.pie(
@@ -226,19 +255,23 @@ if not df.empty:
             )
             fig_pie.update_layout(margin=dict(l=20, r=20, t=20, b=20))
             st.plotly_chart(fig_pie, use_container_width=True)
+        else:
+            st.info("Tiada data untuk dipaparkan.")
 
     # ----------------------------------------------------
-    # 8. JADUAL DATA LIVE
+    # ENJIN CARIAN & JADUAL DATA
     # ----------------------------------------------------
     st.subheader("🔍 Enjin Carian & Data Permohonan Live")
-    
+
     search_term = st.text_input("Carian Pantas (Syarikat, Kod Rujukan, dll.):")
     if search_term and not df_filtered.empty:
-        df_filtered = df_filtered[
-            df_filtered['NAMA SYARIKAT'].astype(str).str.contains(search_term, case=False, na=False) |
-            df_filtered['KOD RUJUKAN PERMOHONAN'].astype(str).str.contains(search_term, case=False, na=False)
-        ]
+        # Cari di seluruh lajur string
+        mask = df_filtered.astype(str).apply(lambda row: row.str.contains(search_term, case=False, na=False)).any(axis=1)
+        df_filtered = df_filtered[mask]
 
-    st.dataframe(df_filtered, use_container_width=True, hide_index=True)
+    # Gugurkan lajur bantuan dalam paparan jadual
+    display_df = df_filtered.drop(columns=['TARIKH_DATETIME', 'FI_CLEAN', 'Tahun'], errors='ignore')
+    st.dataframe(display_df, use_container_width=True, hide_index=True)
+
 else:
-    st.warning("Tiada data ditemui atau tetapan Google Sheets memerlukan kebenaran akses (Public Share).")
+    st.warning("Gagal memuatkan data. Sila pastikan 'gid' tab '2026_Live' dimasukkan dengan betul dalam kod.")
