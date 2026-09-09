@@ -56,23 +56,19 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ----------------------------------------------------
-# 2. FUNGSI MUAT DATA DARI GOOGLE SHEETS
+# FUNGSI MUAT DATA DARI GOOGLE SHEETS (REVISION FIX 404)
 # ----------------------------------------------------
 @st.cache_data(ttl=60)  # Segarkan data automatik setiap 1 minit
 def load_data():
     sheet_id = "13vBLK7XnzhJFKkouzHWg4sBPXwl10WUJKSO638uwjRU"
     
-    # ⚠️ MASUKKAN NOMBOR GID TAB '2026_Live' ANDA DI SINI
-    # Buka tab 2026_Live kat browser, salin nombor selepas 'gid=' dalam URL
-    gid = "531239856"  # Contoh: tukar nombor ini jika berbeza
-    
-    # Format URL CSV menggunakan GID (Mengelakkan Ralat HTTP 404)
-    url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv&gid={gid}"
+    # URL eksport CSV langsung menggunakan nama tab '2026_Live'
+    url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv&sheet=2026_Live"
     
     try:
         df = pd.read_csv(url)
         
-        # Bersihkan nama lajur daripada ruang kosong di awal/hujung
+        # Bersihkan nama lajur daripada ruang kosong
         df.columns = df.columns.str.strip()
         
         # Pembersihan Lajur Tarikh & Tahun
@@ -94,8 +90,6 @@ def load_data():
     except Exception as e:
         st.error(f"Gagal memuatkan data dari Google Sheets: {e}")
         return pd.DataFrame()
-
-df = load_data()
 
 # ----------------------------------------------------
 # 3. SEMAKAN DATA & PEMBINAAN DASHBOARD
